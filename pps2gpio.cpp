@@ -13,17 +13,20 @@
 
 #include <sys/timepps.h>
 
-inline void set_value(const int fd, const int value)
+inline void set_value(const int fd, const int fd2, const int value)
 {
         static char c[32];
         int l = snprintf(c, sizeof c, "%d", value);
 
         write(fd, c, l);
+
+	write(fd2, c, l);
 }
 
 void usage()
 {
 	printf("-g x   GPIO pin to use\n");
+	printf("-G x   second GPIO pin to use. it'll show the same value but will be set after the -g pin. that way you could measure how long it takes to set a gpio-pin\n");
 	printf("-p x   pps-device to use. defaults to pps0\n");
 	printf("-d     fork into the background\n");
 	printf("-h     this help\n");
@@ -37,17 +40,21 @@ void version()
 
 int main(int argc, char *argv[0])
 {
-	int gpio_pps_out_pin = -1;
+	int gpio_pps_out_pin = -1, out_pin_2 = -1;
 	const char *dev = "/dev/pps0";
 	int c = -1;
 	bool fork = false;
 
-	while((c = getopt(argc, argv, "g:p:dhV")) != -1)
+	while((c = getopt(argc, argv, "g:G:p:dhV")) != -1)
 	{
 		switch(c)
 		{
 			case 'g':
 				gpio_pps_out_pin = atoi(optarg);
+				break;
+
+			case 'G':
+				out_pin_2 = atoi(optarg);
 				break;
 
 			case 'p':
@@ -71,6 +78,9 @@ int main(int argc, char *argv[0])
 				return 1;
 		}
 	}
+
+	if (gpio_pps_out_pin == -1)
+		error_exit(false, "Need to select a GPIO pin (using -g)");
 
 	bool first_it = true;
 
@@ -106,7 +116,18 @@ int main(int argc, char *argv[0])
 
 		gpio_export(gpio_pps_out_pin);
 		gpio_set_dir(gpio_pps_out_pin, 1);
-		int gfd = gpio_fd_open(gpio_pps_out_pin);
+		int gfd = gpio_fd_open(gpio_pps_out_pin), gfd2 = -1;
+
+		if (out_pin_2 != -1)
+		{
+			gpio_export(out_pin_2);
+			gpio_set_dir(out_pin_2, 1);
+			gfd2 = gpio_fd_open(out_pin_2);
+		}
+		else
+		{
+			gfd2 = open("/dev/null", O_WRONLY);
+		}
 
 		if (first_it && fork && daemon(0, 0) == -1)
 			error_exit(true, "Failed to fork into the background");
@@ -122,13 +143,13 @@ int main(int argc, char *argv[0])
 
 			if (time_pps_fetch(ph, PPS_TSFMT_TSPEC, &infobuf, &timeout) == -1)
 			{
-				set_value(gfd, false);
+				set_value(gfd, gfd2, false);
 				printf("Failed waiting for event\n");
 				break;
 			}
 
 			state = !state;
-			set_value(gfd, state);
+			set_value(gfd, gfd2, state);
 
 			struct timeval tv;
 			if (gettimeofday(&tv, NULL) == -1)
