@@ -5,3 +5,5 @@ Pulses a GPIO pin (on e.g. an embedded Linux system like the raspberry pi or cub
 
 Written by folkert@vanheusden.com
 Licensed under AGPL v3.0.
+
+P.s. the gpio-int-test.* files were retrieved from https://www.ridgerun.com/developer/wiki/index.php/Gpio-int-test.c
